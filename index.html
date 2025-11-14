@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WiFi Billing System</title>
+  <style>
+    :root {
+      --primary: #0078D7;
+      --accent: #28a745;
+      --bg-grad-top: #009966;
+      --bg-grad-bottom: #ff3300;
+      --text: #333;
+      --card: #fafafa;
+    }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+      background: linear-gradient(to bottom, var(--bg-grad-top) 75%, var(--bg-grad-bottom) 100%);
+      margin: 0; padding: 0; min-height: 100vh;
+      display: flex; justify-content: center; align-items: center;
+    }
+    .container {
+      width: 95%; max-width: 900px; padding: 24px;
+      border-radius: 14px; background: white;
+      box-shadow: 0 0 24px rgba(0,0,0,0.15);
+    }
+    h1 { text-align: center; color: var(--primary); margin: 0 0 6px; }
+    h5 { text-align: center; color: var(--text); margin: 0 0 24px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; background: var(--card); border-radius: 10px; overflow: hidden; }
+    th, td { padding: 12px; text-align: center; }
+    th { background: var(--primary); color: white; }
+    tr:nth-child(even) { background: #f1f1f1; }
+    .btn {
+      padding: 10px 16px; border: none; background: var(--primary); color: white;
+      border-radius: 8px; cursor: pointer; transition: 0.2s ease;
+    }
+    .btn:hover { background: #005bb5; transform: translateY(-1px); }
+    .btn-success { background: var(--accent); }
+    .btn-success:hover { background: #218838; }
+    .section { margin: 28px 0; }
+    .footer { text-align: center; color: #555; margin-top: 24px; font-size: 14px; }
+    .modal {
+      display: none; position: fixed; z-index: 999; inset: 0;
+      background: rgba(0,0,0,0.4); justify-content: center; align-items: center;
+      padding: 16px;
+    }
+    .modal-content {
+      background: #e7f3ff; padding: 22px; border-radius: 12px;
+      width: 100%; max-width: 420px; box-shadow: 0 0 18px rgba(0,0,0,0.2);
+      position: relative;
+    }
+    .close-btn { position: absolute; top: 10px; right: 12px; background: transparent; border: none; color: #333; font-size: 20px; cursor: pointer; }
+    label { font-weight: 600; display: block; margin-top: 10px; }
+    input { width: 100%; margin-top: 6px; margin-bottom: 12px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+    .notice { text-align: center; color: #333; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>HOME NETWORK</h1>
+    <h5>Call 0727016623</h5>
+
+    <div class="section" style="text-align:center;">
+      <h3 class="notice">Get 2 Minutes Free Access 🎁</h3>
+      <button id="freeAccessBtn" class="btn btn-success">Connect 2 Minutes Free</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Package</th>
+          <th>Price (Ksh)</th>
+          <th>Duration</th>
+          <th>Bonus</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="packageTable"></tbody>
+    </table>
+
+    <div class="section">
+      <h3>Paid Transactions</h3>
+      <table id="transactionsTable">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Amount</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="transactionsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="footer">© 2025 WiFi Billing System</div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal" id="paymentModal">
+    <div class="modal-content">
+      <button class="close-btn" onclick="closeModal()">&times;</button>
+      <h3>Complete Purchase</h3>
+      <label for="custName">Customer name</label>
+      <input type="text" placeholder="e.g. Ronald Towett" id="custName" />
+      <label for="custPhone">Phone (M-Pesa number)</label>
+      <input type="text" placeholder="07XXXXXXXX" id="custPhone" />
+      <div style="margin: 8px 0;">
+        <input type="checkbox" id="agree" /> <label for="agree" style="display:inline;font-weight:400;">I agree</label>
+      </div>
+      <div style="display:flex; gap:10px; justify-content:flex-end;">
+        <button class="btn" onclick="resetForm()">Reset</button>
+        <button class="btn btn-success" onclick="initiatePayment()">Initiate Payment</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Change this if your backend is hosted elsewhere (e.g., Render)
+    // Example: const BASE_URL = "https://your-app.onrender.com";
+    const BASE_URL = "";
+
+    // Demo packages
+    const packages = [
+      { name: "Basic", price: 5,  duration: "30 min", bonus: "1 min" },
+      { name: "Standard", price: 10, duration: "1 hour", bonus: "5 min" },
+      { name: "Bronze", price: 20, duration: "2 hours", bonus: "10 min" },
+      { name: "Silver", price: 50, duration: "6 hours", bonus: "15 min" },
+      { name: "Gold", price: 100, duration: "1 day", bonus: "30 min" },
+      { name: "Platinum", price: 200, duration: "2 days", bonus: "1 hour" }
+    ];
+
+    const packageTable = document.getElementById("packageTable");
+    const transactionsBody = document.getElementById("transactionsBody");
+    const modal = document.getElementById("paymentModal");
+    let selectedPackage = null;
+
+    // Render package rows
+    packages.forEach((pkg, idx) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${pkg.name}</td>
+        <td>${pkg.price}</td>
+        <td>${pkg.duration}</td>
+        <td>${pkg.bonus}</td>
+        <td><button class="btn" onclick="openModal(${idx})">Buy Now</button></td>`;
+      packageTable.appendChild(tr);
+    });
+
+    function openModal(index) { selectedPackage = packages[index]; modal.style.display = "flex"; }
+    function closeModal() { modal.style.display = "none"; resetForm(); }
+    function resetForm() {
+      document.getElementById("custName").value = "";
+      document.getElementById("custPhone").value = "";
+      document.getElementById("agree").checked = false;
+    }
+
+    // Free access
+    document.getElementById("freeAccessBtn").addEventListener("click", async () => {
+      const deviceMac = "demo_mac_001";
+      try {
+        const res = await fetch(`${BASE_URL}/payment`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ type: "free", mac: deviceMac }).toString()
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(data.message || "Free access granted.");
+          // Optionally redirect to a captive page:
+          // window.location.href = "/wifi_home.html";
+        } else {
+          alert(data.errorMessage || "Error granting free access");
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Network error while granting free access");
+      }
+    });
+
+    // Initiate payment
+    async function initiatePayment() {
+      const name = document.getElementById("custName").value.trim();
+      let phone = document.getElementById("custPhone").value.trim();
+      const agreed = document.getElementById("agree").checked;
+
+      if (!name || !phone || !agreed) {
+        alert("Complete all fields and agree to terms.");
+        return;
+      }
+
+      // Normalize phone to 254XXXXXXXXX if user enters 07XXXXXXXX
+      if (phone.startsWith("0") && phone.length >= 10) {
+        phone = "254" + phone.substring(1);
+      }
+
+      const amount = selectedPackage?.price;
+      if (!amount) {
+        alert("No package selected.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${BASE_URL}/payment`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ amount, phone, name }).toString()
+        });
+        const data = await res.json();
+
+        if (data.ResponseCode === "0") {
+          alert("STK Push sent! Waiting for payment confirmation...");
+          const checkoutID = data.CheckoutRequestID;
+
+          const poll = setInterval(async () => {
+            try {
+              const sRes = await fetch(`${BASE_URL}/payment/status?checkoutID=${encodeURIComponent(checkoutID)}`);
+              const status = await sRes.json();
+
+              if (status.ResultCode === 0) {
+                clearInterval(poll);
+                alert("Payment successful!");
+                const now = new Date();
+                const row = document.createElement("tr");
+                row.innerHTML = `<td>${name}</td><td>${phone}</td><td>${amount}</td><td>${now.toLocaleString()}</td>`;
+                transactionsBody.appendChild(row);
+              } else if (status.ResultCode !== null && status.ResultCode !== undefined) {
+                clearInterval(poll);
+                alert("Payment failed or cancelled.");
+              }
+            } catch (err) {
+              console.log(err);
+            }
+          }, 3000);
+        } else {
+          alert("Error initiating payment: " + (data.errorMessage || data.ResponseDescription || "Unknown error"));
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Network error during payment initiation");
+      }
+
+      closeModal();
+    }
+
+    // Close modal on backdrop click
+    window.onclick = function (event) {
+      if (event.target === modal) { closeModal(); }
+    };
+  </script>
+</body>
+</html>
